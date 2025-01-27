@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::{fs::{FileTimes, FileType}, rc::Rc, sync::Arc};
 
 use log::{debug, info};
 use reqwest::{Client, Response, Url};
@@ -74,18 +74,18 @@ where
     request(client, url).await
 }
 
-pub trait TelegramFile : Sync + Send{
+pub trait TelegramFile{
     fn file_id(&self)-> &str;
     fn file_size(&self) -> u64;
 }
 
 #[derive(Debug, serde::Deserialize, Clone)]
 pub struct ThumbFile {
-    file_id: String,
-    file_unique_id: String,
-    file_size: u64,
-    width: u32,
-    height: u32
+    pub file_id: String,
+    pub file_unique_id: String,
+    pub file_size: u64,
+    pub width: u32,
+    pub height: u32
 }
 
 impl TelegramFile for ThumbFile {
@@ -98,6 +98,18 @@ impl TelegramFile for ThumbFile {
     }
 }
 
+pub enum StickerFileExt {
+    Webp,
+    Webm
+}
+impl ToString for StickerFileExt{
+    fn to_string(&self) -> String {
+        match self {
+            StickerFileExt::Webp => "webp".to_string(),
+            StickerFileExt::Webm => "webm".to_string(),
+        }
+    }
+}
 
 #[derive(Debug, serde::Deserialize, Clone)]
 pub struct Sticker{
@@ -113,9 +125,22 @@ pub struct Sticker{
     pub thumbnail: ThumbFile,
     pub thumb: ThumbFile,
     pub file_id: String,
-    file_unique_id: String,
-    file_size: u64
+    pub file_unique_id: String,
+    pub file_size: u64
 }
+
+impl Sticker {
+    pub fn file_ext(&self)->StickerFileExt{
+        match (self.is_animated, self.is_video) {
+            (false, false) => StickerFileExt::Webp,
+            (true, false) => StickerFileExt::Webm,
+            (false, true) => StickerFileExt::Webm,
+            _ => unimplemented!(),
+        }
+    }
+}
+
+
 
 impl TelegramFile for Sticker{
     fn file_id(&self)-> &str {
@@ -151,8 +176,8 @@ struct FileInfoResp {
     // file_unique_id: String,
 }
 
-pub struct TelegramFilePath(String);
-impl ToString for TelegramFilePath{
+pub struct TelegramFileID(String);
+impl ToString for TelegramFileID{
     fn to_string(&self) -> String {
         self.0.clone()
     }
@@ -182,7 +207,7 @@ impl Bot {
         })
     }
 
-    pub async fn get_sticker_set(&self, name: &str) -> Result<StickerSet> {
+    pub async fn request_sticker_set(&self, name: &str) -> Result<StickerSet> {
         let sticker_set = request_telegram::<StickerSet>(
             &self.client,
             &self.token,
@@ -195,17 +220,17 @@ impl Bot {
         Ok(sticker_set)
     }
 
-    pub async fn get_url(&self, sticker: &dyn TelegramFile) -> Result<TelegramFilePath>{
-        let file = request_telegram::<FileInfoResp>(
+    pub async fn request_file_id(&self, sticker: &dyn TelegramFile) -> Result<TelegramFileID>{
+        let file: FileInfoResp = request_telegram::<FileInfoResp>(
             &self.client,
             &self.token,
             "getFile",
             &[("file_id", sticker.file_id())],
         ).await?;
-        Ok(TelegramFilePath(file.file_path))
+        Ok(TelegramFileID(file.file_path))
     }
 
-    pub async fn send_download_request(&self, path: &TelegramFilePath)->Result<Response>{
+    pub async fn download_file(&self, path: &TelegramFileID)->Result<Response>{
         let link = format!("https://api.telegram.org/file/bot{}/{}", self.token, &path.0);
         let request = self.client.get(link);
         Ok(request.send().await?)
@@ -252,7 +277,7 @@ mod test {
         ];
         let bot = Bot::login(token()).await.unwrap();
         for name in test_list {
-            let sticker_set = bot.get_sticker_set(name).await.unwrap();
+            let sticker_set = bot.request_sticker_set(name).await.unwrap();
             println!("{:?}", sticker_set);
         }
     }
