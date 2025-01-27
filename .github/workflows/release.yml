@@ -1,0 +1,102 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    name: Build and Release Binaries
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+          - os: macos-latest
+            target: aarch64-apple-darwin
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install musl
+        if: startsWith(matrix.target, 'x86_64-unknown-linux-musl') || startsWith(matrix.target, 'aarch64-unknown-linux-musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      # compile ring for aarch64 by using llvm 
+      # https://github.com/briansmith/ring/issues/1414#issuecomment-1055177218
+      - name: Install LLVM on aarch64
+        if: startsWith(matrix.target, 'aarch64-unknown-linux-musl')
+        run: |
+          sudo apt-get install -y llvm clang
+          echo "CC_aarch64_unknown_linux_musl=clang" >> $GITHUB_ENV
+          echo "AR_aarch64_unknown_linux_musl=llvm-ar" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS=-Clink-self-contained=yes -Clinker=rust-lld" >> $GITHUB_ENV
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+
+      - name: Build project
+        run: cargo build --release --target ${{ matrix.target }}
+      
+      - name: Rename output binary
+        run: |
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            mv target/${{ matrix.target }}/release/tsticker-cli.exe tsticker-cli-${{ matrix.target }}.exe
+          else
+            mv target/${{ matrix.target }}/release/tsticker-cli tsticker-cli-${{ matrix.target }}
+          fi
+        shell: bash
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.target }}-binary
+          path: |
+            tsticker-cli-${{ matrix.target }}*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download binaries
+        uses: actions/download-artifact@v3
+        with:
+          path: binaries
+
+      - name: Compress binaries
+        run: |
+          mkdir compressed
+          find binaries -type f | while read file; do
+            if [[ "$file" == *.exe ]]; then
+              zip compressed/$(basename "$file" .exe).zip "$file"
+            else
+              tar -czvf compressed/$(basename "$file").tar.gz "$file"
+            fi
+          done
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: compressed/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
