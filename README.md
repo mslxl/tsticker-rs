@@ -1,12 +1,12 @@
 <div align=center>
 
-# tstickers-rs
+# tsticker-rs
 
-[![NixOS](https://img.shields.io/badge/Made_for-Rust-orange.svg?logo=rust&style=for-the-badge)](https://www.rust-lang.org/) [![NixOS](https://img.shields.io/badge/Flakes-Nix-informational.svg?logo=nixos&style=for-the-badge)](https://nixos.org) ![License](https://img.shields.io/github/license/mslxl/tstickers-rs?style=for-the-badge)
+[![NixOS](https://img.shields.io/badge/Made_for-Rust-orange.svg?logo=rust&style=for-the-badge)](https://www.rust-lang.org/) [![NixOS](https://img.shields.io/badge/Flakes-Nix-informational.svg?logo=nixos&style=for-the-badge)](https://nixos.org) ![License](https://img.shields.io/github/license/mslxl/tsticker-rs?style=for-the-badge)
 
 Telegram sticker package download API and CLI
 
-![Screenshot](./screen.mp4)
+![Video](./screen.mp4)
 
 </div>
 
